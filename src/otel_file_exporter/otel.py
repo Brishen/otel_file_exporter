@@ -120,26 +120,6 @@ class EnhancedFileSpanExporter(ThreadSafeFileExporter, SpanExporter):
 class EnhancedFileLogExporter(ThreadSafeFileExporter, LogExporter):
     """Simple console log exporter"""
 
-    def export(self, batch: Sequence[LogData]) -> LogExportResult:
-        try:
-            for log_data in batch:
-                lr = log_data.log_record
-
-                # Extract basic info safely
-                timestamp = getattr(lr, "timestamp", int(time.time() * 1_000_000_000))
-                level = getattr(lr, "severity_text", "INFO")
-                message = str(getattr(lr, "body", ""))
-
-                # Simple console output
-                print(f"[{level}] {message}")
-            return LogExportResult.SUCCESS
-        except Exception as e:
-            print(f"Console log export error: {e}")
-            return LogExportResult.FAILURE
-
-    def force_flush(self, timeout_millis: int = 30000) -> bool:
-        return True
-
     def shutdown(self) -> None:
         pass
 
@@ -223,7 +203,7 @@ class EnhancedFileLogExporter(ThreadSafeFileExporter, LogExporter):
             print(f"ERROR: Failed to export logs: {e}", file=sys.stderr)
             return LogExportResult.FAILURE
 
-    def force_flush(self, timeout_millis: int = 30000) -> bool:
+    def force_flush(self) -> bool:
         try:
             if self._file and not self._file.closed:
                 self._file.flush()
@@ -583,7 +563,8 @@ class EnhancedSQLiteLogExporter(SQLiteExporterBase, LogExporter):
                             getattr(lr, "attributes", {}), default=str
                         ),
                         "resource": json.dumps(
-                            getattr(lr.resource, "attributes", {}) if getattr(lr, "resource", None) else {},
+                            getattr(lr.resource, "attributes", {}) if getattr(lr, "resource",
+                                                                              None) else {},
                             default=str
                         ),
                     }
