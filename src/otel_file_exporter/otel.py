@@ -1,29 +1,17 @@
 import json
 import logging
-import threading
-from sqlalchemy import (
-    create_engine,
-    text,
-    MetaData,
-    Table,
-    Column,
-    Integer,
-    String,
-    Float,
-    Text,
-)
-# ─── Configuration ──────────────────────────────────────────────────────────────
 import os
+import threading
 import time
 from pathlib import Path
 from typing import Any, Dict, Optional, Sequence
 
-from opentelemetry import trace, metrics
-from opentelemetry._logs import set_logger_provider, get_logger
+from opentelemetry import metrics, trace
+from opentelemetry._logs import get_logger, set_logger_provider
 from opentelemetry.instrumentation.logging import LoggingInstrumentor
 from opentelemetry.propagate import set_global_textmap
 from opentelemetry.propagators.b3 import B3MultiFormat
-from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler, LogData
+from opentelemetry.sdk._logs import LogData, LoggerProvider, LoggingHandler
 from opentelemetry.sdk._logs._internal.export import LogExportResult
 from opentelemetry.sdk._logs.export import (
     BatchLogRecordProcessor,
@@ -36,7 +24,7 @@ from opentelemetry.sdk.metrics.export import (
     MetricExportResult,
     PeriodicExportingMetricReader,
 )
-from opentelemetry.sdk.resources import SERVICE_NAME, SERVICE_VERSION, Resource
+from opentelemetry.sdk.resources import Resource, SERVICE_NAME, SERVICE_VERSION
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import (
     BatchSpanProcessor,
@@ -44,6 +32,7 @@ from opentelemetry.sdk.trace.export import (
     SpanExportResult,
 )
 from opentelemetry.sdk.trace.sampling import TraceIdRatioBased
+from sqlalchemy import (Column, create_engine, Float, Integer, MetaData, String, Table, text, Text)
 
 
 class Config:
@@ -74,7 +63,9 @@ class ThreadSafeFileExporter:
         """Write JSON object as single line with error handling"""
         try:
             self._open_file()
-            json.dump(data, self._file, separators=(",", ":"), ensure_ascii=False, default=str)
+            json.dump(
+                data, self._file, separators=(",", ":"), ensure_ascii=False, default=str
+            )
             self._file.write("\n")
             self._file.flush()
         except Exception as e:
@@ -101,18 +92,22 @@ class EnhancedFileSpanExporter(ThreadSafeFileExporter, SpanExporter):
                     "duration_ms": (span.end_time - span.start_time) / 1_000_000,
                     "status": {
                         "code": span.status.status_code.name,
-                        "message": span.status.description
+                        "message": span.status.description,
                     },
                     "attributes": dict(span.attributes) if span.attributes else {},
                     "events": [
                         {
                             "name": event.name,
                             "timestamp": event.timestamp,
-                            "attributes": dict(event.attributes) if event.attributes else {}
+                            "attributes": dict(event.attributes)
+                            if event.attributes
+                            else {},
                         }
                         for event in span.events
-                    ] if span.events else [],
-                    "resource": dict(span.resource.attributes) if span.resource else {}
+                    ]
+                    if span.events
+                    else [],
+                    "resource": dict(span.resource.attributes) if span.resource else {},
                 }
                 self._write_json_line(span_data)
             return SpanExportResult.SUCCESS
@@ -130,9 +125,9 @@ class EnhancedFileLogExporter(ThreadSafeFileExporter, LogExporter):
                 lr = log_data.log_record
 
                 # Extract basic info safely
-                timestamp = getattr(lr, 'timestamp', int(time.time() * 1_000_000_000))
-                level = getattr(lr, 'severity_text', 'INFO')
-                message = str(getattr(lr, 'body', ''))
+                timestamp = getattr(lr, "timestamp", int(time.time() * 1_000_000_000))
+                level = getattr(lr, "severity_text", "INFO")
+                message = str(getattr(lr, "body", ""))
 
                 # Simple console output
                 print(f"[{level}] {message}")
@@ -157,9 +152,9 @@ class EnhancedFileLogExporter(ThreadSafeFileExporter, LogExporter):
 
                 # Extract timestamp - different LogRecord implementations may vary
                 timestamp = None
-                if hasattr(lr, 'timestamp'):
+                if hasattr(lr, "timestamp"):
                     timestamp = lr.timestamp
-                elif hasattr(lr, 'observed_timestamp'):
+                elif hasattr(lr, "observed_timestamp"):
                     timestamp = lr.observed_timestamp
                 else:
                     # Fallback to current time in nanoseconds
@@ -167,38 +162,63 @@ class EnhancedFileLogExporter(ThreadSafeFileExporter, LogExporter):
 
                 # Extract severity/level
                 level = "INFO"
-                if hasattr(lr, 'severity_text') and lr.severity_text:
+                if hasattr(lr, "severity_text") and lr.severity_text:
                     level = lr.severity_text
-                elif hasattr(lr, 'severity_number'):
+                elif hasattr(lr, "severity_number"):
                     # Map severity numbers to text
                     severity_map = {
-                        1: "TRACE", 2: "TRACE2", 3: "TRACE3", 4: "TRACE4",
-                        5: "DEBUG", 6: "DEBUG2", 7: "DEBUG3", 8: "DEBUG4",
-                        9: "INFO", 10: "INFO2", 11: "INFO3", 12: "INFO4",
-                        13: "WARN", 14: "WARN2", 15: "WARN3", 16: "WARN4",
-                        17: "ERROR", 18: "ERROR2", 19: "ERROR3", 20: "ERROR4",
-                        21: "FATAL", 22: "FATAL2", 23: "FATAL3", 24: "FATAL4"
+                        1: "TRACE",
+                        2: "TRACE2",
+                        3: "TRACE3",
+                        4: "TRACE4",
+                        5: "DEBUG",
+                        6: "DEBUG2",
+                        7: "DEBUG3",
+                        8: "DEBUG4",
+                        9: "INFO",
+                        10: "INFO2",
+                        11: "INFO3",
+                        12: "INFO4",
+                        13: "WARN",
+                        14: "WARN2",
+                        15: "WARN3",
+                        16: "WARN4",
+                        17: "ERROR",
+                        18: "ERROR2",
+                        19: "ERROR3",
+                        20: "ERROR4",
+                        21: "FATAL",
+                        22: "FATAL2",
+                        23: "FATAL3",
+                        24: "FATAL4",
                     }
                     level = severity_map.get(lr.severity_number, "INFO")
 
                 log_entry = {
                     "timestamp": timestamp,
                     "level": level,
-                    "message": str(lr.body) if hasattr(lr, 'body') else "",
-                    "trace_id": format(lr.trace_id, "032x") if hasattr(lr,
-                                                                       'trace_id') and lr.trace_id and lr.trace_id != 0 else None,
-                    "span_id": format(lr.span_id, "016x") if hasattr(lr,
-                                                                     'span_id') and lr.span_id and lr.span_id != 0 else None,
-                    "attributes": dict(lr.attributes) if hasattr(lr,
-                                                                 'attributes') and lr.attributes else {},
-                    "resource": dict(lr.resource.attributes) if hasattr(lr,
-                                                                        'resource') and lr.resource and lr.resource.attributes else {}
+                    "message": str(lr.body) if hasattr(lr, "body") else "",
+                    "trace_id": format(lr.trace_id, "032x")
+                    if hasattr(lr, "trace_id") and lr.trace_id and lr.trace_id != 0
+                    else None,
+                    "span_id": format(lr.span_id, "016x")
+                    if hasattr(lr, "span_id") and lr.span_id and lr.span_id != 0
+                    else None,
+                    "attributes": dict(lr.attributes)
+                    if hasattr(lr, "attributes") and lr.attributes
+                    else {},
+                    "resource": dict(lr.resource.attributes)
+                    if hasattr(lr, "resource")
+                       and lr.resource
+                       and lr.resource.attributes
+                    else {},
                 }
                 self._write_json_line(log_entry)
             return LogExportResult.SUCCESS
         except Exception as e:
             # Use Python's logging to avoid recursion
             import sys
+
             print(f"ERROR: Failed to export logs: {e}", file=sys.stderr)
             return LogExportResult.FAILURE
 
@@ -232,7 +252,7 @@ class EnhancedFileMetricExporter(ThreadSafeFileExporter, MetricExporter):
     ) -> MetricExportResult:
         try:
             # Handle different metrics data structures
-            if hasattr(metrics_data, 'resource_metrics'):
+            if hasattr(metrics_data, "resource_metrics"):
                 # New structure with resource_metrics attribute
                 resource_metrics = metrics_data.resource_metrics
             else:
@@ -247,41 +267,52 @@ class EnhancedFileMetricExporter(ThreadSafeFileExporter, MetricExporter):
                             "description": metric.description or "",
                             "unit": metric.unit or "",
                             "type": type(metric.data).__name__,
-                            "resource": dict(
-                                resource_metric.resource.attributes) if resource_metric.resource and resource_metric.resource.attributes else {},
+                            "resource": dict(resource_metric.resource.attributes)
+                            if resource_metric.resource
+                               and resource_metric.resource.attributes
+                            else {},
                             "scope": {
-                                "name": scope_metric.scope.name if scope_metric.scope else "",
-                                "version": scope_metric.scope.version if scope_metric.scope else ""
+                                "name": scope_metric.scope.name
+                                if scope_metric.scope
+                                else "",
+                                "version": scope_metric.scope.version
+                                if scope_metric.scope
+                                else "",
                             },
                             "data_points": [],
-                            "timestamp": int(time.time() * 1000)  # Add timestamp for debugging
+                            "timestamp": int(
+                                time.time() * 1000
+                            ),  # Add timestamp for debugging
                         }
 
                         # Handle different data point types
-                        data_points = getattr(metric.data, 'data_points', [])
+                        data_points = getattr(metric.data, "data_points", [])
                         for point in data_points:
                             point_data = {
-                                "attributes": dict(point.attributes) if hasattr(point,
-                                                                                'attributes') and point.attributes else {},
-                                "start_time": getattr(point, 'start_time_unix_nano', 0),
-                                "time": getattr(point, 'time_unix_nano', 0),
+                                "attributes": dict(point.attributes)
+                                if hasattr(point, "attributes") and point.attributes
+                                else {},
+                                "start_time": getattr(point, "start_time_unix_nano", 0),
+                                "time": getattr(point, "time_unix_nano", 0),
                             }
 
                             # Add value based on point type
-                            if hasattr(point, 'value'):
-                                point_data['value'] = point.value
-                            if hasattr(point, 'sum'):
-                                point_data['sum'] = point.sum
-                            if hasattr(point, 'count'):
-                                point_data['count'] = point.count
-                            if hasattr(point, 'bucket_counts'):
-                                point_data['bucket_counts'] = list(point.bucket_counts)
-                            if hasattr(point, 'explicit_bounds'):
-                                point_data['explicit_bounds'] = list(point.explicit_bounds)
-                            if hasattr(point, 'min'):
-                                point_data['min'] = point.min
-                            if hasattr(point, 'max'):
-                                point_data['max'] = point.max
+                            if hasattr(point, "value"):
+                                point_data["value"] = point.value
+                            if hasattr(point, "sum"):
+                                point_data["sum"] = point.sum
+                            if hasattr(point, "count"):
+                                point_data["count"] = point.count
+                            if hasattr(point, "bucket_counts"):
+                                point_data["bucket_counts"] = list(point.bucket_counts)
+                            if hasattr(point, "explicit_bounds"):
+                                point_data["explicit_bounds"] = list(
+                                    point.explicit_bounds
+                                )
+                            if hasattr(point, "min"):
+                                point_data["min"] = point.min
+                            if hasattr(point, "max"):
+                                point_data["max"] = point.max
 
                             metric_data["data_points"].append(point_data)
 
@@ -290,11 +321,14 @@ class EnhancedFileMetricExporter(ThreadSafeFileExporter, MetricExporter):
         except Exception as e:
             # Use print to avoid recursion
             import sys
+
             print(f"ERROR: Failed to export metrics: {e}", file=sys.stderr)
             print(f"Metrics data type: {type(metrics_data)}", file=sys.stderr)
-            if hasattr(metrics_data, '__dict__'):
-                print(f"Metrics data attributes: {list(metrics_data.__dict__.keys())}",
-                      file=sys.stderr)
+            if hasattr(metrics_data, "__dict__"):
+                print(
+                    f"Metrics data attributes: {list(metrics_data.__dict__.keys())}",
+                    file=sys.stderr,
+                )
             return MetricExportResult.FAILURE
 
     def force_flush(self, timeout_millis: int = 30000) -> bool:
@@ -319,9 +353,9 @@ class SimpleConsoleLogExporter(LogExporter):
                 lr = log_data.log_record
 
                 # Extract basic info safely
-                timestamp = getattr(lr, 'timestamp', int(time.time() * 1_000_000_000))
-                level = getattr(lr, 'severity_text', 'INFO')
-                message = str(getattr(lr, 'body', ''))
+                timestamp = getattr(lr, "timestamp", int(time.time() * 1_000_000_000))
+                level = getattr(lr, "severity_text", "INFO")
+                message = str(getattr(lr, "body", ""))
 
                 # Simple console output
                 print(f"[{level}] {message}")
@@ -486,14 +520,17 @@ class EnhancedSQLiteSpanExporter(SQLiteExporterBase, SpanExporter):
                                 {
                                     "name": e.name,
                                     "timestamp": e.timestamp,
-                                    "attributes": dict(e.attributes) if e.attributes else {},
+                                    "attributes": dict(e.attributes)
+                                    if e.attributes
+                                    else {},
                                 }
                                 for e in span.events
                             ],
                             default=str,
                         ),
                         "resource": json.dumps(
-                            span.resource.attributes if span.resource else {}, default=str
+                            span.resource.attributes if span.resource else {},
+                            default=str,
                         ),
                     }
                 )
@@ -517,8 +554,12 @@ class EnhancedSQLiteLogExporter(SQLiteExporterBase, LogExporter):
                 timestamp = getattr(lr, "timestamp", int(time.time() * 1_000_000_000))
                 level = getattr(lr, "severity_text", "INFO")
                 message = str(getattr(lr, "body", ""))
-                trace_id = format(lr.trace_id, "032x") if getattr(lr, "trace_id", 0) else None
-                span_id = format(lr.span_id, "016x") if getattr(lr, "span_id", 0) else None
+                trace_id = (
+                    format(lr.trace_id, "032x") if getattr(lr, "trace_id", 0) else None
+                )
+                span_id = (
+                    format(lr.span_id, "016x") if getattr(lr, "span_id", 0) else None
+                )
 
                 rows.append(
                     {
@@ -542,9 +583,9 @@ class EnhancedSQLiteLogExporter(SQLiteExporterBase, LogExporter):
 
 class EnhancedSQLiteMetricExporter(SQLiteExporterBase, MetricExporter):
     def __init__(
-        self,
-        preferred_temporality: Optional[Dict[type, AggregationTemporality]] = None,
-        preferred_aggregation: Optional[Dict[type, object]] = None,
+            self,
+            preferred_temporality: Optional[Dict[type, AggregationTemporality]] = None,
+            preferred_aggregation: Optional[Dict[type, object]] = None,
     ):
         SQLiteExporterBase.__init__(self)
         MetricExporter.__init__(
@@ -557,7 +598,9 @@ class EnhancedSQLiteMetricExporter(SQLiteExporterBase, MetricExporter):
         # Schema is created once globally by SQLiteExporterBase._init_schema()
         return
 
-    def export(self, metrics_data: Sequence, timeout_millis: int = 10000) -> MetricExportResult:
+    def export(
+            self, metrics_data: Sequence, timeout_millis: int = 10000
+    ) -> MetricExportResult:
         try:
             resource_metrics = (
                 metrics_data.resource_metrics
@@ -569,11 +612,16 @@ class EnhancedSQLiteMetricExporter(SQLiteExporterBase, MetricExporter):
 
             for resource_metric in resource_metrics:
                 res_json = json.dumps(
-                    resource_metric.resource.attributes if resource_metric.resource else {}, default=str
+                    resource_metric.resource.attributes
+                    if resource_metric.resource
+                    else {},
+                    default=str,
                 )
                 for scope_metric in resource_metric.scope_metrics:
                     scope_name = scope_metric.scope.name if scope_metric.scope else ""
-                    scope_version = scope_metric.scope.version if scope_metric.scope else ""
+                    scope_version = (
+                        scope_metric.scope.version if scope_metric.scope else ""
+                    )
                     for metric in scope_metric.metrics:
                         data_type = type(metric.data).__name__
                         for point in getattr(metric.data, "data_points", []):
@@ -593,7 +641,9 @@ class EnhancedSQLiteMetricExporter(SQLiteExporterBase, MetricExporter):
                                     "scope_version": scope_version,
                                     "attributes": attrs_json,
                                     "value": value,
-                                    "start_time": getattr(point, "start_time_unix_nano", 0),
+                                    "start_time": getattr(
+                                        point, "start_time_unix_nano", 0
+                                    ),
                                     "time": getattr(point, "time_unix_nano", 0),
                                     "timestamp": now_ms,
                                 }
@@ -608,12 +658,14 @@ class EnhancedSQLiteMetricExporter(SQLiteExporterBase, MetricExporter):
 # ─── Observability Setup ───────────────────────────────────────────────────────
 def setup_resource() -> Resource:
     """Create a resource with service information"""
-    return Resource.create({
-        SERVICE_NAME: Config.SERVICE_NAME,
-        SERVICE_VERSION: Config.SERVICE_VERSION,
-        "environment": Config.ENVIRONMENT,
-        "host.name": os.getenv("HOSTNAME", Path.cwd().name)
-    })
+    return Resource.create(
+        {
+            SERVICE_NAME: Config.SERVICE_NAME,
+            SERVICE_VERSION: Config.SERVICE_VERSION,
+            "environment": Config.ENVIRONMENT,
+            "host.name": os.getenv("HOSTNAME", Path.cwd().name),
+        }
+    )
 
 
 def setup_tracing(resource: Resource):
@@ -623,18 +675,19 @@ def setup_tracing(resource: Resource):
 
     # Configure tracer provider with sampling
     tracer_provider = TracerProvider(
-        resource=resource,
-        sampler=TraceIdRatioBased(Config.TRACE_SAMPLE_RATE)
+        resource=resource, sampler=TraceIdRatioBased(Config.TRACE_SAMPLE_RATE)
     )
     trace.set_tracer_provider(tracer_provider)
 
     # Add only our custom exporters to avoid compatibility issues
     tracer_provider.add_span_processor(
         BatchSpanProcessor(
-            EnhancedSQLiteSpanExporter() if Config.EXPORTER_BACKEND == "sqlite" else EnhancedFileSpanExporter(),
+            EnhancedSQLiteSpanExporter()
+            if Config.EXPORTER_BACKEND == "sqlite"
+            else EnhancedFileSpanExporter(),
             max_queue_size=2048,
             max_export_batch_size=512,
-            export_timeout_millis=30000
+            export_timeout_millis=30000,
         )
     )
 
@@ -649,7 +702,9 @@ def setup_logging(resource: Resource):
     # Add only our custom processors - avoid problematic ConsoleLogExporter
     log_provider.add_log_record_processor(
         BatchLogRecordProcessor(
-            EnhancedSQLiteLogExporter() if Config.EXPORTER_BACKEND == "sqlite" else EnhancedFileLogExporter()
+            EnhancedSQLiteLogExporter()
+            if Config.EXPORTER_BACKEND == "sqlite"
+            else EnhancedFileLogExporter()
         )
     )
 
@@ -657,7 +712,7 @@ def setup_logging(resource: Resource):
     console_handler = logging.StreamHandler()
     console_handler.setLevel(getattr(logging, Config.LOG_LEVEL.upper()))
     console_formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
     console_handler.setFormatter(console_formatter)
 
@@ -669,13 +724,14 @@ def setup_logging(resource: Resource):
 
     # Add OpenTelemetry handler for structured logging
     otel_handler = LoggingHandler(
-        level=getattr(logging, Config.LOG_LEVEL.upper()),
-        logger_provider=log_provider
+        level=getattr(logging, Config.LOG_LEVEL.upper()), logger_provider=log_provider
     )
     root_logger.addHandler(otel_handler)
 
     # Configure the instrumentation
-    LoggingInstrumentor().instrument(set_logging_format=False)  # Don't let it override our format
+    LoggingInstrumentor().instrument(
+        set_logging_format=False
+    )  # Don't let it override our format
 
     # Return both Python logger and OTel logger
     python_logger = logging.getLogger(__name__)
@@ -689,10 +745,12 @@ def setup_metrics(resource: Resource):
         resource=resource,
         metric_readers=[
             PeriodicExportingMetricReader(
-                EnhancedSQLiteMetricExporter() if Config.EXPORTER_BACKEND == "sqlite" else EnhancedFileMetricExporter(),
-                export_interval_millis=Config.METRICS_EXPORT_INTERVAL
+                EnhancedSQLiteMetricExporter()
+                if Config.EXPORTER_BACKEND == "sqlite"
+                else EnhancedFileMetricExporter(),
+                export_interval_millis=Config.METRICS_EXPORT_INTERVAL,
             ),
-        ]
+        ],
     )
     metrics.set_meter_provider(meter_provider)
 
@@ -701,24 +759,18 @@ def setup_metrics(resource: Resource):
     # Business metrics
     return {
         "request_counter": meter.create_counter(
-            "http_requests_total",
-            description="Total HTTP requests",
-            unit="1"
+            "http_requests_total", description="Total HTTP requests", unit="1"
         ),
         "request_duration": meter.create_histogram(
             "http_request_duration_seconds",
             description="HTTP request duration",
-            unit="s"
+            unit="s",
         ),
         "active_connections": meter.create_up_down_counter(
-            "http_active_connections",
-            description="Active HTTP connections",
-            unit="1"
+            "http_active_connections", description="Active HTTP connections", unit="1"
         ),
         "error_counter": meter.create_counter(
-            "http_errors_total",
-            description="Total HTTP errors",
-            unit="1"
+            "http_errors_total", description="Total HTTP errors", unit="1"
         ),
     }
 
