@@ -430,6 +430,24 @@ class SQLiteExporterBase:
             with SQLiteExporterBase._engine.begin() as conn:
                 conn.execute(text(sql), params)
 
+    # ----------------------------------------------------------------- #
+    # Public helper to insert rows with SQLAlchemy Core                  #
+    # ----------------------------------------------------------------- #
+    def _insert(self, table_name: str, rows: Sequence[Dict[str, Any]]):
+        """
+        Bulk-insert one or more rows into the given table using SQLAlchemy Core.
+
+        Args:
+            table_name: Name of the target table (``spans``, ``logs`` or ``metrics``)
+            rows:      Sequence of dictionaries keyed by column name.
+        """
+        if not rows:
+            return
+        table = SQLiteExporterBase._tables[table_name]
+        with self._lock:
+            with SQLiteExporterBase._engine.begin() as conn:
+                conn.execute(table.insert(), rows)
+
     # --------------------------------------------------------------------- #
     # OpenTelemetry hooks
     # --------------------------------------------------------------------- #
@@ -450,32 +468,36 @@ class EnhancedSQLiteSpanExporter(SQLiteExporterBase, SpanExporter):
 
     def export(self, spans: Sequence) -> SpanExportResult:
         try:
+            rows = []
             for span in spans:
-                self._execute(
-                    "INSERT INTO spans VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-                    (
-                        format(span.context.trace_id, '032x'),
-                        format(span.context.span_id, '016x'),
-                        span.name,
-                        span.start_time,
-                        span.end_time,
-                        (span.end_time - span.start_time) / 1_000_000,
-                        span.status.status_code.name,
-                        span.status.description,
-                        json.dumps(span.attributes or {}, default=str),
-                        json.dumps(
+                rows.append(
+                    {
+                        "trace_id": format(span.context.trace_id, "032x"),
+                        "span_id": format(span.context.span_id, "016x"),
+                        "name": span.name,
+                        "start_time": span.start_time,
+                        "end_time": span.end_time,
+                        "duration_ms": (span.end_time - span.start_time) / 1_000_000,
+                        "status_code": span.status.status_code.name,
+                        "status_message": span.status.description,
+                        "attributes": json.dumps(span.attributes or {}, default=str),
+                        "events": json.dumps(
                             [
                                 {
                                     "name": e.name,
                                     "timestamp": e.timestamp,
-                                    "attributes": dict(e.attributes) if e.attributes else {}
-                                } for e in span.events
+                                    "attributes": dict(e.attributes) if e.attributes else {},
+                                }
+                                for e in span.events
                             ],
-                            default=str
+                            default=str,
                         ),
-                        json.dumps(span.resource.attributes if span.resource else {}, default=str)
-                    ),
+                        "resource": json.dumps(
+                            span.resource.attributes if span.resource else {}, default=str
+                        ),
+                    }
                 )
+            self._insert("spans", rows)
             return SpanExportResult.SUCCESS
         except Exception as e:
             logging.error(f"Failed to export spans to SQLite: {e}")
@@ -489,6 +511,7 @@ class EnhancedSQLiteLogExporter(SQLiteExporterBase, LogExporter):
 
     def export(self, batch: Sequence[LogData]) -> LogExportResult:
         try:
+            rows = []
             for log_data in batch:
                 lr = log_data.log_record
                 timestamp = getattr(lr, "timestamp", int(time.time() * 1_000_000_000))
@@ -496,13 +519,21 @@ class EnhancedSQLiteLogExporter(SQLiteExporterBase, LogExporter):
                 message = str(getattr(lr, "body", ""))
                 trace_id = format(lr.trace_id, "032x") if getattr(lr, "trace_id", 0) else None
                 span_id = format(lr.span_id, "016x") if getattr(lr, "span_id", 0) else None
-                attributes = json.dumps(lr.attributes or {}, default=str)
-                resource = json.dumps(lr.resource.attributes if lr.resource else {}, default=str)
 
-                self._execute(
-                    "INSERT INTO logs VALUES(?,?,?,?,?,?,?)",
-                    (timestamp, level, message, trace_id, span_id, attributes, resource),
+                rows.append(
+                    {
+                        "timestamp": timestamp,
+                        "level": level,
+                        "message": message,
+                        "trace_id": trace_id,
+                        "span_id": span_id,
+                        "attributes": json.dumps(lr.attributes or {}, default=str),
+                        "resource": json.dumps(
+                            lr.resource.attributes if lr.resource else {}, default=str
+                        ),
+                    }
                 )
+            self._insert("logs", rows)
             return LogExportResult.SUCCESS
         except Exception as e:
             logging.error(f"Failed to export logs to SQLite: {e}")
@@ -528,8 +559,13 @@ class EnhancedSQLiteMetricExporter(SQLiteExporterBase, MetricExporter):
 
     def export(self, metrics_data: Sequence, timeout_millis: int = 10000) -> MetricExportResult:
         try:
-            resource_metrics = metrics_data.resource_metrics if hasattr(metrics_data, "resource_metrics") else metrics_data
+            resource_metrics = (
+                metrics_data.resource_metrics
+                if hasattr(metrics_data, "resource_metrics")
+                else metrics_data
+            )
             now_ms = int(time.time() * 1000)
+            rows = []
 
             for resource_metric in resource_metrics:
                 res_json = json.dumps(
@@ -545,23 +581,24 @@ class EnhancedSQLiteMetricExporter(SQLiteExporterBase, MetricExporter):
                             if value is None and hasattr(point, "sum"):
                                 value = point.sum
                             attrs_json = json.dumps(point.attributes or {}, default=str)
-                            self._execute(
-                                "INSERT INTO metrics VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
-                                (
-                                    metric.name,
-                                    metric.description or "",
-                                    metric.unit or "",
-                                    data_type,
-                                    res_json,
-                                    scope_name,
-                                    scope_version,
-                                    attrs_json,
-                                    value,
-                                    getattr(point, "start_time_unix_nano", 0),
-                                    getattr(point, "time_unix_nano", 0),
-                                    now_ms,
-                                ),
+
+                            rows.append(
+                                {
+                                    "name": metric.name,
+                                    "description": metric.description or "",
+                                    "unit": metric.unit or "",
+                                    "type": data_type,
+                                    "resource": res_json,
+                                    "scope_name": scope_name,
+                                    "scope_version": scope_version,
+                                    "attributes": attrs_json,
+                                    "value": value,
+                                    "start_time": getattr(point, "start_time_unix_nano", 0),
+                                    "time": getattr(point, "time_unix_nano", 0),
+                                    "timestamp": now_ms,
+                                }
                             )
+            self._insert("metrics", rows)
             return MetricExportResult.SUCCESS
         except Exception as e:
             logging.error(f"Failed to export metrics to SQLite: {e}")
