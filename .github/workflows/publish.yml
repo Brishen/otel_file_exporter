@@ -23,21 +23,17 @@ jobs:
       - name: ✨ Check out repository
         uses: actions/checkout@v4
 
-      - name: 🐍 Set up Python 3.13
-        uses: actions/setup-python@v5
+      - name: 🐍 Install uv and Python 3.13
+        uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.13"
-          cache: "pip"
+          version: "0.8.5"
+          enable-cache: true
 
-      - name: 🚀 Install uv with pipx
-        uses: brettcannon/pipx-install@v1
-        with:
-          packages: uv
-
-      - name: 🏗️ Build wheel and sdist with uv
+      - name: 🏗️ Build wheel and sdist
         run: |
           uv pip install build
-          uv pip run python -m build --sdist --wheel --outdir dist
+          uv run python -m build --sdist --wheel --outdir dist
 
       - name: 📦 Publish to PyPI
         uses: pypa/gh-action-pypi-publish@v1
