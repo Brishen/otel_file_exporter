@@ -578,9 +578,12 @@ class EnhancedSQLiteLogExporter(SQLiteExporterBase, LogExporter):
                         "message": message,
                         "trace_id": trace_id,
                         "span_id": span_id,
-                        "attributes": json.dumps(lr.attributes or {}, default=str),
+                        "attributes": json.dumps(
+                            getattr(lr, "attributes", {}), default=str
+                        ),
                         "resource": json.dumps(
-                            lr.resource.attributes if lr.resource else {}, default=str
+                            getattr(lr.resource, "attributes", {}) if getattr(lr, "resource", None) else {},
+                            default=str
                         ),
                     }
                 )
