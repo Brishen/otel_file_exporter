@@ -1,5 +1,5 @@
 [project]
-name = "testing"
+name = "otel_file_exporter"
 version = "0.1.0"
 description = "Add your description here"
 requires-python = ">=3.13"
