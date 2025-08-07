@@ -1,0 +1,66 @@
+# GitHub Actions workflow to build the package with `uv` and publish it to PyPI
+#
+# Uses *trusted publishing* via OIDC – no PyPI API token required.
+# The workflow is triggered whenever a GitHub Release is published or
+# via the "Run workflow" button in the Actions tab.
+#
+# It builds the wheel + sdist with `uv`, uploads them as a workflow
+# artifact and then publishes the same files to PyPI.
+
+name: Upload Python Package
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 🐍 Install uv (incl. Python 3.13) and enable cache
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+          # Pin the uv version for deterministic builds
+          version: "0.8.5"
+          enable-cache: true
+
+      - name: 🏗️ Build wheel and sdist
+        run: |
+          uv pip install build
+          uv run python -m build --sdist --wheel --outdir dist
+
+      - name: 📦 Upload distributions
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-dists
+          path: dist/
+
+  pypi-publish:
+    runs-on: ubuntu-latest
+    needs: build-release
+    permissions:
+      id-token: write      # mandatory for trusted publishing
+      contents: read
+
+    environment:
+      name: pypi            # configure protection rules in the repo settings if desired
+
+    steps:
+      - name: 🔽 Download release artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: release-dists
+          path: dist/
+
+      - name: 🚀 Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
