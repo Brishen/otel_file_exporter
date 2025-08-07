@@ -20,7 +20,6 @@ classifiers = [
 ]
 requires-python = ">=3.13"
 dependencies = [
-    "fastapi>=0.116.1",
     "opentelemetry-api>=1.36.0",
     "opentelemetry-exporter-otlp>=1.36.0",
     "opentelemetry-instrumentation-fastapi>=0.57b0",
@@ -28,12 +27,17 @@ dependencies = [
     "opentelemetry-propagator-b3>=1.36.0",
     "opentelemetry-sdk>=1.36.0",
     "sqlalchemy>=2.0",
-    "uvicorn>=0.35.0",
 ]
 
 [dependency-groups]
 dev = [
     "ruff>=0.12.7",
+]
+
+[project.optional-dependencies]
+web = [
+    "fastapi>=0.116.1",
+    "uvicorn>=0.35.0",
 ]
 
 [project.urls]
