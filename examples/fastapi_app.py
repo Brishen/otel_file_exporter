@@ -117,7 +117,7 @@ async def track_requests(request: Request, call_next):
         response = await call_next(request)
         span = trace.get_current_span()
         if span.is_recording():
-            response.headers["X-Trace-ID"] = format(span.context.trace_id, "032x")
+            response.headers["X-Trace-ID"] = format(span.get_span_context().trace_id, "032x")
         return response
     finally:
         duration = time.time() - start_time
@@ -133,7 +133,7 @@ async def track_requests(request: Request, call_next):
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
     span = trace.get_current_span()
-    trace_id = format(span.context.trace_id, "032x") if span.is_recording() else None
+    trace_id = format(span.get_span_context().trace_id, "032x") if span.is_recording() else None
     app_metrics["error_counter"].add(1, {"status_code": str(exc.status_code), "endpoint": str(request.url.path)})
     logger.error(
         f"HTTP {exc.status_code}: {exc.detail}",
@@ -154,7 +154,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
     span = trace.get_current_span()
-    trace_id = format(span.context.trace_id, "032x") if span.is_recording() else None
+    trace_id = format(span.get_span_context().trace_id, "032x") if span.is_recording() else None
     app_metrics["error_counter"].add(1, {"status_code": "500", "endpoint": str(request.url.path)})
     logger.error(
         f"Unexpected error: {exc}",

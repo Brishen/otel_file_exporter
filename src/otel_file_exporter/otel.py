@@ -85,8 +85,8 @@ class EnhancedFileSpanExporter(ThreadSafeFileExporter, SpanExporter):
         try:
             for span in spans:
                 span_data = {
-                    "trace_id": format(span.context.trace_id, "032x"),
-                    "span_id": format(span.context.span_id, "016x"),
+                    "trace_id": format(span.get_span_context().trace_id, "032x"),
+                    "span_id": format(span.get_span_context().span_id, "016x"),
                     "name": span.name,
                     "start_time": span.start_time,
                     "end_time": span.end_time,
@@ -501,8 +501,8 @@ class EnhancedSQLiteSpanExporter(SQLiteExporterBase, SpanExporter):
             for span in spans:
                 rows.append(
                     {
-                        "trace_id": format(span.context.trace_id, "032x"),
-                        "span_id": format(span.context.span_id, "016x"),
+                        "trace_id": format(span.get_span_context().trace_id, "032x"),
+                        "span_id": format(span.get_span_context().span_id, "016x"),
                         "name": span.name,
                         "start_time": span.start_time,
                         "end_time": span.end_time,
