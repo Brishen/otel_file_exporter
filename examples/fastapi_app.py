@@ -19,7 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from opentelemetry import trace, metrics
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-from opentelemetry.semconv.trace import SpanAttributes
+from opentelemetry.semconv.attributes import HTTP_ROUTE
 
 # Re-use helpers, data models and configured telemetry objects
 from otel_file_exporter.otel import (
@@ -187,7 +187,7 @@ async def get_item(item_id: int, include_description: bool = False):
 
     span = trace.get_current_span()
     span.set_attributes({
-        SpanAttributes.HTTP_ROUTE: "/items/{item_id}",
+        HTTP_ROUTE: "/items/{item_id}",
         "item.id": item_id,
         "item.include_description": include_description,
         "business.operation": "get_item",
