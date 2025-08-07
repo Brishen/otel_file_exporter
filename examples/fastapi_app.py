@@ -19,7 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from opentelemetry import trace, metrics
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-from opentelemetry.semconv.attributes import HTTP_ROUTE
+from opentelemetry.semconv.attributes.http_attributes import HTTP_ROUTE
 
 # Re-use helpers, data models and configured telemetry objects
 from otel_file_exporter.otel import (
