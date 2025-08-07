@@ -229,7 +229,8 @@ class EnhancedFileMetricExporter(ThreadSafeFileExporter, MetricExporter):
     def export(
             self,
             metrics_data: Any,
-            timeout_millis: int = 10000,
+            timeout_millis: float = 10000,
+            **kwargs,
     ) -> MetricExportResult:
         try:
             # Handle different metrics data structures
@@ -594,7 +595,10 @@ class EnhancedSQLiteMetricExporter(SQLiteExporterBase, MetricExporter):
         return
 
     def export(
-            self, metrics_data: Any, timeout_millis: int = 10000
+            self,
+            metrics_data: Any,
+            timeout_millis: float = 10000,
+            **kwargs,
     ) -> MetricExportResult:
         try:
             resource_metrics = (
