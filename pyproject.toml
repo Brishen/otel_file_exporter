@@ -2,6 +2,22 @@
 name = "otel_file_exporter"
 version = "0.1.0"
 description = "Lightweight OpenTelemetry file exporter that writes traces, logs and metrics to local JSON Lines files"
+readme = "README.md"
+license = {file = "LICENSE"}
+keywords = ["opentelemetry", "tracing", "logging", "metrics", "jsonl", "observability"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.13",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Framework :: FastAPI",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Logging",
+    "Topic :: System :: Monitoring",
+]
 requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.116.1",
@@ -19,3 +35,9 @@ dependencies = [
 dev = [
     "ruff>=0.12.7",
 ]
+
+[project.urls]
+Homepage = "https://github.com/your-org/otel_file_exporter"
+Source = "https://github.com/your-org/otel_file_exporter"
+Issues = "https://github.com/your-org/otel_file_exporter/issues"
+Changelog = "https://github.com/your-org/otel_file_exporter/releases"
