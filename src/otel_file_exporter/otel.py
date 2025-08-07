@@ -44,12 +44,8 @@ class Config:
     OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", "./telemetry"))
 
 
-
-
 # ─── Enhanced File Exporters ───────────────────────────────────────────────────
 class ThreadSafeFileExporter:
-    """Base class with common file handling patterns using pathlib"""
-
     def __init__(self, filename: str):
         Config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         self._filepath = Config.OUTPUT_DIR / filename
@@ -112,7 +108,7 @@ class EnhancedFileSpanExporter(ThreadSafeFileExporter, SpanExporter):
 
 
 class EnhancedFileLogExporter(ThreadSafeFileExporter, LogExporter):
-    """Simple console log exporter that doesn't rely on to_json()"""
+    """Simple console log exporter"""
 
     def export(self, batch: Sequence[LogData]) -> LogExportResult:
         try:
@@ -448,5 +444,3 @@ resource = setup_resource()
 tracer = setup_tracing(resource)
 logger, otel_logger = setup_logging(resource)
 app_metrics = setup_metrics(resource)
-
-
