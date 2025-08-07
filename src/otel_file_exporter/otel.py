@@ -1,7 +1,17 @@
 import json
 import logging
 import threading
-from sqlalchemy import create_engine, text
+from sqlalchemy import (
+    create_engine,
+    text,
+    MetaData,
+    Table,
+    Column,
+    Integer,
+    String,
+    Float,
+    Text,
+)
 # ─── Configuration ──────────────────────────────────────────────────────────────
 import os
 import time
@@ -355,48 +365,64 @@ class SQLiteExporterBase:
     # --------------------------------------------------------------------- #
     @staticmethod
     def _init_schema():
-        """Create tables if they don't exist – executed once per process."""
-        ddl_statements = [
-            """CREATE TABLE IF NOT EXISTS spans(
-                   trace_id TEXT,
-                   span_id TEXT,
-                   name TEXT,
-                   start_time INTEGER,
-                   end_time INTEGER,
-                   duration_ms REAL,
-                   status_code TEXT,
-                   status_message TEXT,
-                   attributes TEXT,
-                   events TEXT,
-                   resource TEXT
-               );""",
-            """CREATE TABLE IF NOT EXISTS logs(
-                   timestamp INTEGER,
-                   level TEXT,
-                   message TEXT,
-                   trace_id TEXT,
-                   span_id TEXT,
-                   attributes TEXT,
-                   resource TEXT
-               );""",
-            """CREATE TABLE IF NOT EXISTS metrics(
-                   name TEXT,
-                   description TEXT,
-                   unit TEXT,
-                   type TEXT,
-                   resource TEXT,
-                   scope_name TEXT,
-                   scope_version TEXT,
-                   attributes TEXT,
-                   value REAL,
-                   start_time INTEGER,
-                   time INTEGER,
-                   timestamp INTEGER
-               );""",
-        ]
-        with SQLiteExporterBase._engine.begin() as conn:
-            for ddl in ddl_statements:
-                conn.execute(text(ddl))
+        """Create tables using SQLAlchemy Core – executed once per process."""
+        metadata = MetaData()
+
+        spans_table = Table(
+            "spans",
+            metadata,
+            Column("trace_id", String),
+            Column("span_id", String),
+            Column("name", String),
+            Column("start_time", Integer),
+            Column("end_time", Integer),
+            Column("duration_ms", Float),
+            Column("status_code", String),
+            Column("status_message", String),
+            Column("attributes", Text),
+            Column("events", Text),
+            Column("resource", Text),
+        )
+
+        logs_table = Table(
+            "logs",
+            metadata,
+            Column("timestamp", Integer),
+            Column("level", String),
+            Column("message", Text),
+            Column("trace_id", String, nullable=True),
+            Column("span_id", String, nullable=True),
+            Column("attributes", Text),
+            Column("resource", Text),
+        )
+
+        metrics_table = Table(
+            "metrics",
+            metadata,
+            Column("name", String),
+            Column("description", Text),
+            Column("unit", String),
+            Column("type", String),
+            Column("resource", Text),
+            Column("scope_name", String),
+            Column("scope_version", String),
+            Column("attributes", Text),
+            Column("value", Float),
+            Column("start_time", Integer),
+            Column("time", Integer),
+            Column("timestamp", Integer),
+        )
+
+        # Create all tables
+        metadata.create_all(SQLiteExporterBase._engine)
+
+        # Stash metadata & tables for optional future use
+        SQLiteExporterBase._metadata = metadata
+        SQLiteExporterBase._tables = {
+            "spans": spans_table,
+            "logs": logs_table,
+            "metrics": metrics_table,
+        }
 
     def _execute(self, sql: str, params: tuple):
         """Execute parametrized SQL using SQLAlchemy Core."""
@@ -419,21 +445,8 @@ class SQLiteExporterBase:
 
 class EnhancedSQLiteSpanExporter(SQLiteExporterBase, SpanExporter):
     def _setup_schema(self):
-        self._conn.execute(
-            """CREATE TABLE IF NOT EXISTS spans(
-                   trace_id TEXT,
-                   span_id TEXT,
-                   name TEXT,
-                   start_time INTEGER,
-                   end_time INTEGER,
-                   duration_ms REAL,
-                   status_code TEXT,
-                   status_message TEXT,
-                   attributes TEXT,
-                   events TEXT,
-                   resource TEXT
-               );"""
-        )
+        # Schema is created once globally by SQLiteExporterBase._init_schema()
+        return
 
     def export(self, spans: Sequence) -> SpanExportResult:
         try:
@@ -471,17 +484,8 @@ class EnhancedSQLiteSpanExporter(SQLiteExporterBase, SpanExporter):
 
 class EnhancedSQLiteLogExporter(SQLiteExporterBase, LogExporter):
     def _setup_schema(self):
-        self._conn.execute(
-            """CREATE TABLE IF NOT EXISTS logs(
-                   timestamp INTEGER,
-                   level TEXT,
-                   message TEXT,
-                   trace_id TEXT,
-                   span_id TEXT,
-                   attributes TEXT,
-                   resource TEXT
-               );"""
-        )
+        # Schema is created once globally by SQLiteExporterBase._init_schema()
+        return
 
     def export(self, batch: Sequence[LogData]) -> LogExportResult:
         try:
@@ -519,22 +523,8 @@ class EnhancedSQLiteMetricExporter(SQLiteExporterBase, MetricExporter):
         )
 
     def _setup_schema(self):
-        self._conn.execute(
-            """CREATE TABLE IF NOT EXISTS metrics(
-                   name TEXT,
-                   description TEXT,
-                   unit TEXT,
-                   type TEXT,
-                   resource TEXT,
-                   scope_name TEXT,
-                   scope_version TEXT,
-                   attributes TEXT,
-                   value REAL,
-                   start_time INTEGER,
-                   time INTEGER,
-                   timestamp INTEGER
-               );"""
-        )
+        # Schema is created once globally by SQLiteExporterBase._init_schema()
+        return
 
     def export(self, metrics_data: Sequence, timeout_millis: int = 10000) -> MetricExportResult:
         try:
