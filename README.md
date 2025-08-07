@@ -1,6 +1,6 @@
 # otel_file_exporter
 
-A **FastAPI** demo project that showcases end-to-end observability **without any external back-ends**.  
+A lightweight OpenTelemetry file exporter that writes traces, logs and metrics to local JSON Lines files – **no external back-ends required**.  
 All traces, logs and metrics are written locally as _newline-delimited JSON_ (`*.jsonl`) so they can be inspected with
 your favorite tools or fed into pipelines later.
 
@@ -15,7 +15,7 @@ telemetry/
 
 * Zero-dependency observability for demos, local development and CI
 * Uses the official OpenTelemetry SDK – switch to OTLP / Jaeger / etc. at any time
-* Demonstrates **structured logging**, **custom exporters** and **FastAPI instrumentation**
+* Demonstrates **structured logging** and **custom OpenTelemetry exporters**
 
 ## Requirements
 

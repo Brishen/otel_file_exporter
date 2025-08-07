@@ -1,8 +1,7 @@
 """
 otel_file_exporter package.
 
-Helpers to instrument FastAPI applications with OpenTelemetry and export
-traces, logs and metrics to local JSONL files.
+A utility to export OpenTelemetry traces, logs and metrics to local JSONL files – framework-agnostic.
 """
 
 from importlib import metadata as _metadata
