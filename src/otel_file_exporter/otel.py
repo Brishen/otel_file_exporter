@@ -3,17 +3,18 @@ import logging
 # ─── Configuration ──────────────────────────────────────────────────────────────
 import os
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Dict, Optional, Sequence
 
-from opentelemetry import trace, metrics
-from opentelemetry._logs import set_logger_provider, get_logger
-from opentelemetry.instrumentation.logging import LoggingInstrumentor
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from opentelemetry import trace, metrics
+from opentelemetry._logs import set_logger_provider, get_logger
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.logging import LoggingInstrumentor
 from opentelemetry.propagate import set_global_textmap
 from opentelemetry.propagators.b3 import B3MultiFormat
 from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler, LogData
