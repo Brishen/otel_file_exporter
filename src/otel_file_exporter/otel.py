@@ -6,12 +6,8 @@ import time
 from pathlib import Path
 from typing import Any, Dict, Optional, Sequence
 
-from fastapi import FastAPI, HTTPException, Request, status
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from opentelemetry import trace, metrics
 from opentelemetry._logs import set_logger_provider, get_logger
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.logging import LoggingInstrumentor
 from opentelemetry.propagate import set_global_textmap
 from opentelemetry.propagators.b3 import B3MultiFormat
