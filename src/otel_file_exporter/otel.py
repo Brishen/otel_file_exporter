@@ -1,5 +1,7 @@
 import json
 import logging
+import sqlite3
+import threading
 # ─── Configuration ──────────────────────────────────────────────────────────────
 import os
 import time
@@ -42,6 +44,8 @@ class Config:
     TRACE_SAMPLE_RATE = float(os.getenv("TRACE_SAMPLE_RATE", "1.0"))
     METRICS_EXPORT_INTERVAL = int(os.getenv("METRICS_EXPORT_INTERVAL", "30000"))
     OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", "./telemetry"))
+    EXPORTER_BACKEND = os.getenv("EXPORTER_BACKEND", "file").lower()
+    SQLITE_DB_PATH = Path(os.getenv("SQLITE_DB_PATH", "./telemetry/telemetry.db"))
 
 
 # ─── Enhanced File Exporters ───────────────────────────────────────────────────
@@ -323,6 +327,200 @@ class SimpleConsoleLogExporter(LogExporter):
         pass
 
 
+# ─── Enhanced SQLite Exporters ─────────────────────────────────────────────────
+class SQLiteExporterBase:
+    """
+    Thread-safe base exporter that maintains a single SQLite connection.
+    """
+
+    _lock = threading.Lock()
+
+    def __init__(self, db_path: Path = Config.SQLITE_DB_PATH):
+        Config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        if not db_path.is_absolute():
+            db_path = Config.OUTPUT_DIR / db_path
+        self._conn = sqlite3.connect(db_path, check_same_thread=False)
+        self._conn.execute("PRAGMA journal_mode=WAL;")
+        self._setup_schema()
+
+    def _setup_schema(self):
+        raise NotImplementedError
+
+    def _execute(self, sql: str, params: tuple):
+        with self._lock:
+            self._conn.execute(sql, params)
+            self._conn.commit()
+
+    def force_flush(self, timeout_millis: int = 30000) -> bool:  # compatibility
+        return True
+
+    def shutdown(self) -> None:
+        with self._lock:
+            self._conn.commit()
+            self._conn.close()
+
+
+class EnhancedSQLiteSpanExporter(SQLiteExporterBase, SpanExporter):
+    def _setup_schema(self):
+        self._conn.execute(
+            """CREATE TABLE IF NOT EXISTS spans(
+                   trace_id TEXT,
+                   span_id TEXT,
+                   name TEXT,
+                   start_time INTEGER,
+                   end_time INTEGER,
+                   duration_ms REAL,
+                   status_code TEXT,
+                   status_message TEXT,
+                   attributes TEXT,
+                   events TEXT,
+                   resource TEXT
+               );"""
+        )
+
+    def export(self, spans: Sequence) -> SpanExportResult:
+        try:
+            for span in spans:
+                self._execute(
+                    "INSERT INTO spans VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                    (
+                        format(span.context.trace_id, '032x'),
+                        format(span.context.span_id, '016x'),
+                        span.name,
+                        span.start_time,
+                        span.end_time,
+                        (span.end_time - span.start_time) / 1_000_000,
+                        span.status.status_code.name,
+                        span.status.description,
+                        json.dumps(span.attributes or {}, default=str),
+                        json.dumps(
+                            [
+                                {
+                                    "name": e.name,
+                                    "timestamp": e.timestamp,
+                                    "attributes": dict(e.attributes) if e.attributes else {}
+                                } for e in span.events
+                            ],
+                            default=str
+                        ),
+                        json.dumps(span.resource.attributes if span.resource else {}, default=str)
+                    ),
+                )
+            return SpanExportResult.SUCCESS
+        except Exception as e:
+            logging.error(f"Failed to export spans to SQLite: {e}")
+            return SpanExportResult.FAILURE
+
+
+class EnhancedSQLiteLogExporter(SQLiteExporterBase, LogExporter):
+    def _setup_schema(self):
+        self._conn.execute(
+            """CREATE TABLE IF NOT EXISTS logs(
+                   timestamp INTEGER,
+                   level TEXT,
+                   message TEXT,
+                   trace_id TEXT,
+                   span_id TEXT,
+                   attributes TEXT,
+                   resource TEXT
+               );"""
+        )
+
+    def export(self, batch: Sequence[LogData]) -> LogExportResult:
+        try:
+            for log_data in batch:
+                lr = log_data.log_record
+                timestamp = getattr(lr, "timestamp", int(time.time() * 1_000_000_000))
+                level = getattr(lr, "severity_text", "INFO")
+                message = str(getattr(lr, "body", ""))
+                trace_id = format(lr.trace_id, "032x") if getattr(lr, "trace_id", 0) else None
+                span_id = format(lr.span_id, "016x") if getattr(lr, "span_id", 0) else None
+                attributes = json.dumps(lr.attributes or {}, default=str)
+                resource = json.dumps(lr.resource.attributes if lr.resource else {}, default=str)
+
+                self._execute(
+                    "INSERT INTO logs VALUES(?,?,?,?,?,?,?)",
+                    (timestamp, level, message, trace_id, span_id, attributes, resource),
+                )
+            return LogExportResult.SUCCESS
+        except Exception as e:
+            logging.error(f"Failed to export logs to SQLite: {e}")
+            return LogExportResult.FAILURE
+
+
+class EnhancedSQLiteMetricExporter(SQLiteExporterBase, MetricExporter):
+    def __init__(
+        self,
+        preferred_temporality: Optional[Dict[type, AggregationTemporality]] = None,
+        preferred_aggregation: Optional[Dict[type, object]] = None,
+    ):
+        SQLiteExporterBase.__init__(self)
+        MetricExporter.__init__(
+            self,
+            preferred_temporality=preferred_temporality,
+            preferred_aggregation=preferred_aggregation,
+        )
+
+    def _setup_schema(self):
+        self._conn.execute(
+            """CREATE TABLE IF NOT EXISTS metrics(
+                   name TEXT,
+                   description TEXT,
+                   unit TEXT,
+                   type TEXT,
+                   resource TEXT,
+                   scope_name TEXT,
+                   scope_version TEXT,
+                   attributes TEXT,
+                   value REAL,
+                   start_time INTEGER,
+                   time INTEGER,
+                   timestamp INTEGER
+               );"""
+        )
+
+    def export(self, metrics_data: Sequence, timeout_millis: int = 10000) -> MetricExportResult:
+        try:
+            resource_metrics = metrics_data.resource_metrics if hasattr(metrics_data, "resource_metrics") else metrics_data
+            now_ms = int(time.time() * 1000)
+
+            for resource_metric in resource_metrics:
+                res_json = json.dumps(
+                    resource_metric.resource.attributes if resource_metric.resource else {}, default=str
+                )
+                for scope_metric in resource_metric.scope_metrics:
+                    scope_name = scope_metric.scope.name if scope_metric.scope else ""
+                    scope_version = scope_metric.scope.version if scope_metric.scope else ""
+                    for metric in scope_metric.metrics:
+                        data_type = type(metric.data).__name__
+                        for point in getattr(metric.data, "data_points", []):
+                            value = getattr(point, "value", None)
+                            if value is None and hasattr(point, "sum"):
+                                value = point.sum
+                            attrs_json = json.dumps(point.attributes or {}, default=str)
+                            self._execute(
+                                "INSERT INTO metrics VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                                (
+                                    metric.name,
+                                    metric.description or "",
+                                    metric.unit or "",
+                                    data_type,
+                                    res_json,
+                                    scope_name,
+                                    scope_version,
+                                    attrs_json,
+                                    value,
+                                    getattr(point, "start_time_unix_nano", 0),
+                                    getattr(point, "time_unix_nano", 0),
+                                    now_ms,
+                                ),
+                            )
+            return MetricExportResult.SUCCESS
+        except Exception as e:
+            logging.error(f"Failed to export metrics to SQLite: {e}")
+            return MetricExportResult.FAILURE
+
+
 # ─── Observability Setup ───────────────────────────────────────────────────────
 def setup_resource() -> Resource:
     """Create a resource with service information"""
@@ -349,7 +547,7 @@ def setup_tracing(resource: Resource):
     # Add only our custom exporters to avoid compatibility issues
     tracer_provider.add_span_processor(
         BatchSpanProcessor(
-            EnhancedFileSpanExporter(),
+            EnhancedSQLiteSpanExporter() if Config.EXPORTER_BACKEND == "sqlite" else EnhancedFileSpanExporter(),
             max_queue_size=2048,
             max_export_batch_size=512,
             export_timeout_millis=30000
@@ -366,7 +564,9 @@ def setup_logging(resource: Resource):
 
     # Add only our custom processors - avoid problematic ConsoleLogExporter
     log_provider.add_log_record_processor(
-        BatchLogRecordProcessor(EnhancedFileLogExporter())
+        BatchLogRecordProcessor(
+            EnhancedSQLiteLogExporter() if Config.EXPORTER_BACKEND == "sqlite" else EnhancedFileLogExporter()
+        )
     )
 
     # Configure Python logging with a simple console handler
@@ -405,7 +605,7 @@ def setup_metrics(resource: Resource):
         resource=resource,
         metric_readers=[
             PeriodicExportingMetricReader(
-                EnhancedFileMetricExporter(),
+                EnhancedSQLiteMetricExporter() if Config.EXPORTER_BACKEND == "sqlite" else EnhancedFileMetricExporter(),
                 export_interval_millis=Config.METRICS_EXPORT_INTERVAL
             ),
         ]
