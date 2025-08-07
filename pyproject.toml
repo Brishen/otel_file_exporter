@@ -37,7 +37,7 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/your-org/otel_file_exporter"
-Source = "https://github.com/your-org/otel_file_exporter"
-Issues = "https://github.com/your-org/otel_file_exporter/issues"
-Changelog = "https://github.com/your-org/otel_file_exporter/releases"
+Homepage = "https://github.com/Brishen/otel_file_exporter"
+Source = "https://github.com/Brishen/otel_file_exporter"
+Issues = "https://github.com/Brishen/otel_file_exporter/issues"
+Changelog = "https://github.com/Brishen/otel_file_exporter/releases"
