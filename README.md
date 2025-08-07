@@ -91,22 +91,15 @@ Feel free to open issues or PRs – contributions are welcome!
 
 ## Publishing to PyPI
 
-### 1. Trusted publishing (recommended)
+All releases are handled by `.github/workflows/publish.yml`.  
+The workflow builds the wheel + sdist with **uv** and uploads them to PyPI
+using `pypa/gh-action-pypi-publish@release/v1`.
 
-The workflow in `.github/workflows/release.yml` uses PyPI’s **Trusted Publishing** (OIDC) together with  
-`pypa/gh-action-pypi-publish@release/v1`.
-
-1. Enable “Trusted Publishing” for the project on PyPI and link it to this repository.  
-2. Create a GitHub Release (or press **Run workflow** in the *Actions* tab).  
-   The build artifacts are uploaded and automatically published to PyPI – **no secret required**.
-
-### 2. Classic API-token publishing
-
-The fallback workflow in `.github/workflows/publish.yml` is triggered whenever you push a git tag
-that matches `v*.*.*`.
+Publishing is triggered automatically when you push a git tag that matches
+`v*.*.*` or when you run the workflow manually from the **Actions** tab.
 
 1. Create a scoped PyPI **API token** with *publish* privileges.  
-2. Add it to the repository secrets as `PYPI_API_TOKEN`.  
+2. Add the token to the repository secrets as `PYPI_API_TOKEN`.  
 3. Tag and push a new version:
 
 ```cmd
