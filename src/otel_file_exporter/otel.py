@@ -41,7 +41,8 @@ class Config:
     ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
     TRACE_SAMPLE_RATE = float(os.getenv("TRACE_SAMPLE_RATE", "1.0"))
-    METRICS_EXPORT_INTERVAL = int(os.getenv("METRICS_EXPORT_INTERVAL", "30000"))
+    # Export metrics every 5 seconds by default so they appear quickly in the DB
+    METRICS_EXPORT_INTERVAL = int(os.getenv("METRICS_EXPORT_INTERVAL", "5000"))
     OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", "./telemetry"))
     EXPORTER_BACKEND = os.getenv("EXPORTER_BACKEND", "file").lower()
     SQLITE_DB_PATH = Path(os.getenv("SQLITE_DB_PATH", "./telemetry/telemetry.db"))
