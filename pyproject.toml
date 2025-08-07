@@ -1,6 +1,6 @@
 [project]
 name = "otel_file_exporter"
-version = "0.1.0"
+version = "0.1.1"
 description = "Lightweight OpenTelemetry file exporter that writes traces, logs and metrics to local JSON Lines files"
 readme = "README.md"
 license = { file = "LICENSE" }
