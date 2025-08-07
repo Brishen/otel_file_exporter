@@ -147,7 +147,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
             message=exc.detail,
             timestamp=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             trace_id=trace_id,
-        ).dict(),
+        ).model_dump(),
     )
 
 
@@ -168,7 +168,7 @@ async def general_exception_handler(request: Request, exc: Exception):
             message="An unexpected error occurred",
             timestamp=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             trace_id=trace_id,
-        ).dict(),
+        ).model_dump(),
     )
 
 
