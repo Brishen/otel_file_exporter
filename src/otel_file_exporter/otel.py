@@ -361,6 +361,9 @@ class SQLiteExporterBase:
 
     _engine = None
     _lock = threading.Lock()
+    # Pre-declare attributes so static type checkers recognize them
+    _tables: Dict[str, Table] = {}
+    _metadata: Optional[MetaData] = None
 
     def __init__(self, db_path: Path = Config.SQLITE_DB_PATH):
         # Ensure the base output directory exists
