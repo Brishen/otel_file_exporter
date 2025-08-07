@@ -32,6 +32,7 @@ jobs:
 
       - name: 🏗️ Build wheel and sdist
         run: |
+          uv venv
           uv pip install build
           uv run python -m build --sdist --wheel --outdir dist
 
