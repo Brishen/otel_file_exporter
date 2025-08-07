@@ -11,6 +11,7 @@ import os
 import time
 from contextlib import asynccontextmanager
 from typing import Optional, Any, Dict, Sequence
+from pydantic import BaseModel, Field
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request, status
@@ -23,12 +24,34 @@ from opentelemetry.semconv.trace import SpanAttributes
 # Re-use helpers, data models and configured telemetry objects
 from otel_file_exporter.otel import (
     Config,
-    Item,
-    ErrorResponse,
     tracer,
     logger,
     otel_logger,
     app_metrics,
+)
+
+# ─── Pydantic Models ───────────────────────────────────────────────────────────
+class Item(BaseModel):
+    item_id: int = Field(..., description="Unique identifier for the item")
+    name: str = Field(..., description="Name of the item")
+    description: Optional[str] = Field(None, description="Item description")
+    price: float = Field(..., ge=0, description="Item price")
+    in_stock: bool = Field(True, description="Whether item is in stock")
+
+
+class ErrorResponse(BaseModel):
+    error: str
+    message: str
+    timestamp: str
+    trace_id: Optional[str] = None
+
+
+# ─── Example-specific Metrics ──────────────────────────────────────────────────
+meter = metrics.get_meter(__name__)
+app_metrics["item_operations"] = meter.create_counter(
+    "item_operations_total",
+    description="Total item operations",
+    unit="1"
 )
 
 # ─── Middleware & lifespan ─────────────────────────────────────────────────────

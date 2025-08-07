@@ -32,8 +32,6 @@ from opentelemetry.sdk.trace.export import (
     SpanExportResult,
 )
 from opentelemetry.sdk.trace.sampling import TraceIdRatioBased
-from opentelemetry.semconv.trace import SpanAttributes
-from pydantic import BaseModel, Field
 
 
 class Config:
@@ -46,20 +44,6 @@ class Config:
     OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", "./telemetry"))
 
 
-# ─── Pydantic Models ───────────────────────────────────────────────────────────
-class Item(BaseModel):
-    item_id: int = Field(..., description="Unique identifier for the item")
-    name: str = Field(..., description="Name of the item")
-    description: Optional[str] = Field(None, description="Item description")
-    price: float = Field(..., ge=0, description="Item price")
-    in_stock: bool = Field(True, description="Whether item is in stock")
-
-
-class ErrorResponse(BaseModel):
-    error: str
-    message: str
-    timestamp: str
-    trace_id: Optional[str] = None
 
 
 # ─── Enhanced File Exporters ───────────────────────────────────────────────────
@@ -456,11 +440,6 @@ def setup_metrics(resource: Resource):
             description="Total HTTP errors",
             unit="1"
         ),
-        "item_operations": meter.create_counter(
-            "item_operations_total",
-            description="Total item operations",
-            unit="1"
-        )
     }
 
 
