@@ -18,7 +18,11 @@ permissions:
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
-
+    environment:
+      name: pypi
+      url: https://pypi.org/p/otel_file_exporter
+    permissions:
+      id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
     steps:
       - name: ✨ Check out repository
         uses: actions/checkout@v4
