@@ -78,8 +78,14 @@ async def lifespan(app: FastAPI):
         args=(),
         exc_info=None
     ))
-    trace.get_tracer_provider().shutdown()
-    metrics.get_meter_provider().shutdown()
+    # Gracefully shut down providers if the SDK exposes the hook
+    _tp = trace.get_tracer_provider()
+    if hasattr(_tp, "shutdown"):
+        _tp.shutdown()  # type: ignore[attr-defined]
+
+    _mp = metrics.get_meter_provider()
+    if hasattr(_mp, "shutdown"):
+        _mp.shutdown()  # type: ignore[attr-defined]
 
 
 # ─── FastAPI Application ───────────────────────────────────────────────────────
