@@ -1,7 +1,7 @@
 import json
 import logging
-import sqlite3
 import threading
+from sqlalchemy import create_engine, text
 # ─── Configuration ──────────────────────────────────────────────────────────────
 import os
 import time
@@ -330,34 +330,91 @@ class SimpleConsoleLogExporter(LogExporter):
 # ─── Enhanced SQLite Exporters ─────────────────────────────────────────────────
 class SQLiteExporterBase:
     """
-    Thread-safe base exporter that maintains a single SQLite connection.
+    Thread-safe base exporter that maintains a single SQLAlchemy engine.
     """
 
+    _engine = None
     _lock = threading.Lock()
 
     def __init__(self, db_path: Path = Config.SQLITE_DB_PATH):
         Config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         if not db_path.is_absolute():
             db_path = Config.OUTPUT_DIR / db_path
-        self._conn = sqlite3.connect(db_path, check_same_thread=False)
-        self._conn.execute("PRAGMA journal_mode=WAL;")
-        self._setup_schema()
 
-    def _setup_schema(self):
-        raise NotImplementedError
+        if SQLiteExporterBase._engine is None:
+            SQLiteExporterBase._engine = create_engine(
+                f"sqlite:///{db_path}",
+                connect_args={"check_same_thread": False},
+                future=True,
+            )
+            # Create tables once
+            SQLiteExporterBase._init_schema()
+
+    # --------------------------------------------------------------------- #
+    # Internal helpers
+    # --------------------------------------------------------------------- #
+    @staticmethod
+    def _init_schema():
+        """Create tables if they don't exist – executed once per process."""
+        ddl_statements = [
+            """CREATE TABLE IF NOT EXISTS spans(
+                   trace_id TEXT,
+                   span_id TEXT,
+                   name TEXT,
+                   start_time INTEGER,
+                   end_time INTEGER,
+                   duration_ms REAL,
+                   status_code TEXT,
+                   status_message TEXT,
+                   attributes TEXT,
+                   events TEXT,
+                   resource TEXT
+               );""",
+            """CREATE TABLE IF NOT EXISTS logs(
+                   timestamp INTEGER,
+                   level TEXT,
+                   message TEXT,
+                   trace_id TEXT,
+                   span_id TEXT,
+                   attributes TEXT,
+                   resource TEXT
+               );""",
+            """CREATE TABLE IF NOT EXISTS metrics(
+                   name TEXT,
+                   description TEXT,
+                   unit TEXT,
+                   type TEXT,
+                   resource TEXT,
+                   scope_name TEXT,
+                   scope_version TEXT,
+                   attributes TEXT,
+                   value REAL,
+                   start_time INTEGER,
+                   time INTEGER,
+                   timestamp INTEGER
+               );""",
+        ]
+        with SQLiteExporterBase._engine.begin() as conn:
+            for ddl in ddl_statements:
+                conn.execute(text(ddl))
 
     def _execute(self, sql: str, params: tuple):
+        """Execute parametrized SQL using SQLAlchemy Core."""
         with self._lock:
-            self._conn.execute(sql, params)
-            self._conn.commit()
+            with SQLiteExporterBase._engine.begin() as conn:
+                conn.execute(text(sql), params)
 
+    # --------------------------------------------------------------------- #
+    # OpenTelemetry hooks
+    # --------------------------------------------------------------------- #
     def force_flush(self, timeout_millis: int = 30000) -> bool:  # compatibility
         return True
 
     def shutdown(self) -> None:
         with self._lock:
-            self._conn.commit()
-            self._conn.close()
+            if SQLiteExporterBase._engine:
+                SQLiteExporterBase._engine.dispose()
+                SQLiteExporterBase._engine = None
 
 
 class EnhancedSQLiteSpanExporter(SQLiteExporterBase, SpanExporter):
