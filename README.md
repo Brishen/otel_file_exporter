@@ -51,7 +51,7 @@ Watch the `telemetry` directory fill with JSONL lines while you interact with th
 | `ENVIRONMENT`           | `development`      | Resource attribute                         |
 | `LOG_LEVEL`             | `INFO`             | Console & JSONL log level                  |
 | `TRACE_SAMPLE_RATE`     | `1.0`              | 0.0-1.0 probability sampler                |
-| `METRICS_EXPORT_INTERVAL`| `30000`           | Export interval in **ms**                  |
+| `METRICS_EXPORT_INTERVAL`| `5000`            | Export interval in **ms**                  |
 | `OUTPUT_DIR`            | `./telemetry`      | Where JSONL files are written              |
 | `PORT`                  | `8000`             | HTTP port for the demo app                 |
 
