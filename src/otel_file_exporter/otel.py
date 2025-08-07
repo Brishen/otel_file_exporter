@@ -228,7 +228,7 @@ class EnhancedFileMetricExporter(ThreadSafeFileExporter, MetricExporter):
 
     def export(
             self,
-            metrics_data: Sequence,
+            metrics_data: Any,
             timeout_millis: int = 10000,
     ) -> MetricExportResult:
         try:
@@ -594,7 +594,7 @@ class EnhancedSQLiteMetricExporter(SQLiteExporterBase, MetricExporter):
         return
 
     def export(
-            self, metrics_data: Sequence, timeout_millis: int = 10000
+            self, metrics_data: Any, timeout_millis: int = 10000
     ) -> MetricExportResult:
         try:
             resource_metrics = (
