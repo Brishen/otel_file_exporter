@@ -10,7 +10,7 @@ import logging
 import os
 import time
 from contextlib import asynccontextmanager
-from typing import Optional, Any, Dict, Sequence
+from typing import Optional
 from pydantic import BaseModel, Field
 
 import uvicorn
@@ -24,7 +24,6 @@ from opentelemetry.semconv.trace import SpanAttributes
 # Re-use helpers, data models and configured telemetry objects
 from otel_file_exporter.otel import (
     Config,
-    tracer,
     logger,
     otel_logger,
     app_metrics,
