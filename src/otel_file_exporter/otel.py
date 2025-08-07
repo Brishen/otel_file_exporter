@@ -381,9 +381,19 @@ class SQLiteExporterBase:
     _lock = threading.Lock()
 
     def __init__(self, db_path: Path = Config.SQLITE_DB_PATH):
+        # Ensure the base output directory exists
         Config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-        if not db_path.is_absolute():
+
+        # ----------------------------------------------------------------- #
+        # Resolve the DB path, avoiding "telemetry/telemetry/telemetry.db"  #
+        # ----------------------------------------------------------------- #
+        db_path = Path(db_path)
+        if not db_path.is_absolute() and db_path.parent == Path("."):
+            # Only prepend OUTPUT_DIR when the caller provided a bare filename
             db_path = Config.OUTPUT_DIR / db_path
+
+        # Create the containing directory in case it does not yet exist
+        db_path.parent.mkdir(parents=True, exist_ok=True)
 
         if SQLiteExporterBase._engine is None:
             SQLiteExporterBase._engine = create_engine(
