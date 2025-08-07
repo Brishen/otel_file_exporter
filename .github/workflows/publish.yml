@@ -1,0 +1,45 @@
+# GitHub Actions workflow to build the package with `uv` and publish it to PyPI
+#
+# Publishing is triggered when a new git tag that matches the pattern `v*.*.*`
+# is pushed.  Set the secret `PYPI_API_TOKEN` in your repository with an
+# API-token that has "publish" rights on PyPI.
+
+name: Publish to PyPI
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: ✨ Check out repository
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: 🚀 Install uv with pipx
+        uses: brettcannon/pipx-install@v1
+        with:
+          packages: uv
+
+      - name: 🏗️ Build wheel and sdist with uv
+        run: |
+          uv pip install build
+          uv pip run python -m build --sdist --wheel --outdir dist
+
+      - name: 📦 Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
