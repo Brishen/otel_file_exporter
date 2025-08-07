@@ -9,6 +9,11 @@ from typing import Any, Dict, Optional, Sequence
 from opentelemetry import trace, metrics
 from opentelemetry._logs import set_logger_provider, get_logger
 from opentelemetry.instrumentation.logging import LoggingInstrumentor
+import uvicorn
+from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.propagate import set_global_textmap
 from opentelemetry.propagators.b3 import B3MultiFormat
 from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler, LogData
@@ -473,7 +478,7 @@ app_metrics = setup_metrics(resource)
 
 # ─── Middleware ────────────────────────────────────────────────────────────────
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI):  # type: ignore[valid-type]
     """Handle application startup and shutdown"""
     # Startup
     logger.info("Application starting up")
